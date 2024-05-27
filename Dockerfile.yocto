@@ -8,7 +8,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 ### A. INSTALL DEPENDENCIES ###
 ###############################
 RUN apt-get update && \
-    apt-get install -y \
+    apt-get install -y software-properties-common && \
+    add-apt-repository -y ppa:deadsnakes/ppa && \
+    apt-get update && \
+    apt-get install -y python3.8 \
+    python3.8-venv \
+    python3.8-dev \
     build-essential \
     git \
     wget \
@@ -34,12 +39,25 @@ RUN apt-get update && \
     unzip \
     bc \
     lzop \
+    nano \
     zstd && \
     apt-get clean
 ### END INSTALL DEPENDENCIES ###
 
+###############################################
+### B. ADD CORRECT PYTHON VERSION FOR YOCTO ###
+###############################################
+# 1. Set Python 3.8 as the default python3
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1
+
+# 2. Create venv, install pip and pyinotify 
+RUN python3.8 -m venv /opt/yocto-env && \
+    /opt/yocto-env/bin/pip install --upgrade pip && \
+    /opt/yocto-env/bin/pip install pyinotify
+### END ADD CORRECT PYTHON VERSION FOR YOCTO ###
+
 ###############################
-### B. SET LOCALE FOR YOCTO ###
+### C. SET LOCALE FOR YOCTO ###
 ###############################
 RUN locale-gen en_US.UTF-8
 ENV LANG en_US.UTF-8
@@ -48,11 +66,11 @@ ENV LC_ALL en_US.UTF-8
 ### END SET LOCALE FOR YOCTO ###
 
 ###################################
-### C. ADD USER FOR YOCTO BUILD ###
+### D. ADD USER FOR YOCTO BUILD ###
 ###################################
 # 1. Create a user for the build process
-RUN useradd -m -s /bin/bash yocto
-RUN echo "yocto ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+RUN useradd -m -s /bin/bash yocto && \
+    echo "yocto ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 # 2. Switch to the yocto user
 USER yocto
@@ -60,7 +78,7 @@ WORKDIR /home/yocto
 ### END ADD USER FOR YOCTO BUILD ###
 
 #############################################
-### D. CONFIGURE YOCTO PROJECT REPOSITORY ###
+### E. CONFIGURE YOCTO PROJECT REPOSITORY ###
 #############################################
 # 1. Clone the Yocto project repository
 RUN git clone git://git.yoctoproject.org/poky.git
@@ -69,19 +87,29 @@ RUN git clone git://git.yoctoproject.org/poky.git
 WORKDIR /home/yocto/poky
 RUN git checkout dunfell
 
-# 3. Source the environment setup script
-RUN . ./oe-init-build-env
-
-# 4. Set the configuration
-RUN cp local.conf /home/yocto/poky/build/conf/local.conf
+# 4. Copy the configuration files
+RUN mkdir -p /home/yocto/confs
+COPY build/conf/local.conf /home/yocto/confs/local.conf
+COPY build/conf/bblayers.conf /home/yocto/confs/bblayers.conf
 ### END CONFIGURE YOCTO PROJECT REPOSITORY ###
 
-#######################
-### E. ADD ANY BSP  ###
-#######################
-# 1. Clone the TI BSP repository
-RUN git clone git://git.yoctoproject.org/meta-ti.git
-RUN git clone git://git.openembedded.org/meta-openembedded
+##############################
+### F. ADD ANY BSP LAYERS  ###
+##############################
+# 1. Clone and configure the TI BSP repository
+RUN git clone git://git.yoctoproject.org/meta-ti.git && \
+    mkdir -p /home/yocto/poky/meta-ti/conf
+COPY meta-ti/conf/layer.conf /home/yocto/poky/meta-ti/conf/layer.conf
+
+# 2. Clone and configure the OpenEmbedded repository
+RUN git clone git://git.openembedded.org/meta-openembedded && \
+    cd /home/yocto/poky/meta-openembedded && \
+    git checkout origin/dunfell -b dunfell
+
+# 3. Copy entrypoint script which will copy accross the configuration files
+COPY entrypoint.sh /home/yocto/entrypoint.sh
+# ENTRYPOINT ["/home/yocto/entrypoint.sh"]
+### END ADD ANY BSP LAYERS  ### 
 
 # Entry point to keep the container running
 CMD ["/bin/bash"]

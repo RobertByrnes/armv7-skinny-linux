@@ -10,7 +10,28 @@
 
 ## Docker build commands
 - `docker build -t yocto-armv7-a-builder -f Dockerfile.yocto .` - This command builds a Docker image named `yocto-armv7-a-builder` using the `Dockerfile.yocto` file.   
-- `docker run --cpus 4 -itd --rm --name yocto-armv7-a-builder yocto-armv7-a-builder` - This command runs a Docker container named `yocto-armv7-a-builder` from the `yocto-armv7-a-builder` image with 4 CPUs.
+- `docker run --cpus 4 -it --name yocto-armv7-a-builder yocto-armv7-a-builder` - This command runs a Docker container named `yocto-armv7-a-builder` from the `yocto-armv7-a-builder` image with 4 CPUs.
 - `docker exec -it yocto-armv7-a-builder bash` - This command opens a bash shell in the running `yocto-armv7-a-builder` container.
 - `docker cp local.conf yocto-armv7-a-builder:/home/yocto/poky/build/conf/local
 .conf` - This command copies the `local.conf` file from the host machine to the `yocto-armv7-a-builder` container.
+`docker stop yocto-armv7-a-builder`
+`docker rm yocto-armv7-a-builder`
+`docker rmi yocto-armv7-a-builder`
+
+## Build
+- `bitbake -c cleanall core-image-minimal` - This command cleans all the build artifacts in Yocto.
+- `bitbake core-image-minimal` - This command builds the minimal image for the ARMv7-A architecture.
+  
+## Directories and files created in the build process 
+```sh
+home/
+├── yocto/
+│ ├── poky/
+│ │ ├── build/
+│ │ │ ├── conf/
+│ │ │ │ ├── layer.conf
+| | | | ├── bblayers.conf
+│ │ ├── meta-ti/
+│ │ │ ├── conf/
+│ │ │ │ ├── layer.conf
+```

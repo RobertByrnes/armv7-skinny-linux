@@ -1,0 +1,116 @@
+# Use Ubuntu as the base image
+FROM ubuntu:20.04
+
+# Set environment variables for non-interactive installs
+ENV DEBIAN_FRONTEND=noninteractive
+ENV BB_ENV_PASSTHROUGH_ADDITIONS="ALL_PROXY BBPATH_EXTRA BB_LOGCONFIG BB_NO_NETWORK BB_NUMBER_THREADS BB_SETSCENE_ENFORCE BB_SRCREV_POLICY DISTRO FTPS_PROXY FTP_PROXY GIT_PROXY_COMMAND HTTPS_PROXY HTTP_PROXY MACHINE NO_PROXY PARALLEL_MAKE SCREENDIR SDKMACHINE SOCKS5_PASSWD SOCKS5_USER SSH_AGENT_PID SSH_AUTH_SOCK STAMPS_DIR TCLIBC TCMODE all_proxy ftp_proxy ftps_proxy http_proxy https_proxy no_proxy"
+###############################
+### A. INSTALL DEPENDENCIES ###
+###############################
+RUN apt-get update && \
+    apt-get install -y software-properties-common && \
+    add-apt-repository -y ppa:deadsnakes/ppa && \
+    apt-get update && \
+    apt-get install -y python3.8 \
+    python3.8-venv \
+    python3.8-dev \
+    build-essential \
+    git \
+    wget \
+    tar \
+    locales \
+    sudo \
+    python3 \
+    python3-pip \
+    python3-pexpect \
+    cpio \
+    file \
+    lz4 \
+    gcc-multilib \
+    g++-multilib \
+    libsdl1.2-dev \
+    texinfo \
+    chrpath \
+    diffstat \
+    gawk \
+    socat \
+    xterm \
+    curl \
+    unzip \
+    bc \
+    lzop \
+    nano \
+    zstd && \
+    apt-get clean
+### END INSTALL DEPENDENCIES ###
+
+###############################################
+### B. ADD CORRECT PYTHON VERSION FOR YOCTO ###
+###############################################
+# 1. Set Python 3.8 as the default python3
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1
+
+# 2. Create venv, install pip and pyinotify 
+RUN python3.8 -m venv /opt/yocto-env && \
+    /opt/yocto-env/bin/pip install --upgrade pip && \
+    /opt/yocto-env/bin/pip install pyinotify
+### END ADD CORRECT PYTHON VERSION FOR YOCTO ###
+
+###############################
+### C. SET LOCALE FOR YOCTO ###
+###############################
+RUN locale-gen en_US.UTF-8
+ENV LANG en_US.UTF-8
+ENV LANGUAGE en_US:en
+ENV LC_ALL en_US.UTF-8
+### END SET LOCALE FOR YOCTO ###
+
+###################################
+### D. ADD USER FOR YOCTO BUILD ###
+###################################
+# 1. Create a user for the build process
+RUN useradd -m -s /bin/bash yocto && \
+    echo "yocto ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+# 2. Switch to the yocto user
+USER yocto
+WORKDIR /home/yocto
+### END ADD USER FOR YOCTO BUILD ###
+
+#############################################
+### E. CONFIGURE YOCTO PROJECT REPOSITORY ###
+#############################################
+# 1. Clone the Yocto project repository
+RUN git clone -b dunfell git://git.yoctoproject.org/poky.git
+
+# 4. Copy the configuration files
+RUN mkdir -p /home/yocto/confs
+COPY build/conf/local.conf /home/yocto/confs/local.conf
+COPY build/conf/bblayers.conf /home/yocto/confs/bblayers.conf
+### END CONFIGURE YOCTO PROJECT REPOSITORY ###
+
+##############################
+### F. ADD ANY BSP LAYERS  ###
+##############################
+# 1. Clone and configure the TI (Texas Instruments) BSP repository
+WORKDIR /home/yocto/poky
+RUN git clone -b dunfell git://git.yoctoproject.org/meta-ti.git
+
+# 2. Clone and configure the OpenEmbedded repository
+RUN git clone -b dunfell git://git.openembedded.org/meta-openembedded
+
+# 3 Clone the Arm repository
+RUN git clone -b dunfell git://git.yoctoproject.org/meta-arm
+### END ADD ANY BSP LAYERS  ### 
+
+# Copy the uninative tarball into the Docker image, this saves a download at runtime
+RUN mkdir -p /home/yocto/poky/uninative
+COPY x86_64-nativesdk-libc-4.4.tar.xz /home/yocto/poky/uninative/x86_64-nativesdk-libc-4.4.tar.xz
+
+# 3. Copy entrypoint script which will copy accross the configuration files
+COPY entrypoint.sh /home/yocto/entrypoint.sh
+RUN sudo chown yocto:yocto /home/yocto/entrypoint.sh && chmod +x /home/yocto/entrypoint.sh
+ENTRYPOINT ["/home/yocto/entrypoint.sh"]
+
+# Entry point to keep the container running
+CMD ["/bin/bash"]
